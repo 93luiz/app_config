@@ -140,11 +140,6 @@ class Value<T> extends Equatable {
 abstract class _ValueDefinition<T> {
   T? get value;
 
-  // bool Function()? get _isEnabled;
-  // set _isEnabled(bool Function()? param);
-
-  // bool get enabled => _isEnabled == null || _isEnabled!();
-
   _ValueDefinition._();
 }
 
@@ -161,9 +156,6 @@ class FixedValue<T> extends _ValueDefinition<T> {
   @override
   final T? value;
 
-  // @override
-  // bool Function()? _isEnabled;
-
   FixedValue(this.value) : super._();
 }
 
@@ -173,9 +165,6 @@ class InvisibleValue<T> extends FixedValue<T> {
 
 class _UserDefinedValue<T> extends _ValueDefinition<T> implements _ModifiableValue<T> {
   final BehaviorSubject<T> streamController;
-
-  // @override
-  // bool Function()? _isEnabled;
 
   @override
   T? get value => streamController.valueOrNull;
@@ -246,9 +235,6 @@ abstract class _DependantValue<T,R> extends _ValueDefinition<T> implements _Modi
   final bool keepLastValueOndisable = false;
 
   bool initialized = false;
-  
-  // @override
-  // bool Function()? _isEnabled;
 
   @override
   T? get value {
@@ -281,8 +267,6 @@ abstract class _DependantValue<T,R> extends _ValueDefinition<T> implements _Modi
   bool isAvailable();
 
   init() {
-    // childValue._definition._isEnabled = isAvailable;
-    // _isEnabled = isAvailable;
     listenDependency(childValue);
     dependencies.forEach((element) {
       listenDependency(element._value);
