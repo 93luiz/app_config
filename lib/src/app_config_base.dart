@@ -1,7 +1,6 @@
 
 import 'dart:async';
 
-import 'package:app_config/app_config.dart';
 import 'package:equatable/equatable.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -44,6 +43,12 @@ class ConfigSet {
     required this.appConfig,
     required this.values,
   });
+
+  ConfigSet copyWith(Set<Value> values) {
+    final Map<String,Value> withKeys = Map.fromEntries(this.values.map((e) => MapEntry(e.property.name, e)));
+    withKeys.addEntries(values.map((e) => MapEntry(e.property.name, e)));
+    return ConfigSet(appConfig: appConfig, values: withKeys.values.toSet());
+  }
 }
 
 class Property<T> extends Equatable {
@@ -116,7 +121,7 @@ class PropertyValueSetter<T> {
 }
 
 
-class Value<T> {
+class Value<T> extends Equatable {
   final Property<T> property;
   final _ValueDefinition<T> _definition;
 
@@ -127,6 +132,9 @@ class Value<T> {
     if (_definition is! _ModifiableValue) throw "Value is not modifiable";
     (_definition as _ModifiableValue).value = value;
   }
+  
+  @override
+  List<Object?> get props => [property];
 }
 
 abstract class _ValueDefinition<T> {
