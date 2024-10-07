@@ -1,22 +1,46 @@
 
 import 'dart:async';
 
+import 'package:app_config/src/config_persistance_interface.dart';
 import 'package:equatable/equatable.dart';
 import 'package:rxdart/rxdart.dart';
 
 class AppConfig {
   final Map<String,Property> _props = {};
   ConfigSet? _activeConfigSet;
+  ConfigPersistanceInterface? persistance;
 
-  void activateConfig(ConfigSet config) { _activeConfigSet = config; }
+  Future<void> activateConfig(ConfigSet config) async {
+    _activeConfigSet = config;
+    if (persistance != null) {
+      final Map<String,dynamic>? data = await persistance!.loadConfig();
+      if (data == null) return;
+      _props.forEach((String key, Property prop) {
+        if (data.containsKey(key) && prop.isModifiable) {
+          prop.fromJson(data[key]);
+        }
+      });
+    }
+  }
+
   void deactivateConfig() { _activeConfigSet = null; }
   ConfigSet config() {
     if (_activeConfigSet == null) throw "No config active";
     return _activeConfigSet!;
   }
 
+  Future<void> persist() async {
+    if (persistance == null) return;
+
+    final Map<String,dynamic> json = Map.fromEntries(
+      _props.entries.map((e) => MapEntry(e.key, e.value.toJson()))
+    );
+
+    await persistance!.saveCongif(json);
+  }
+
   ConfigSet createConfig(Set<Value> values) => ConfigSet(appConfig: this, values: values);
-  Property<T> property<T>({required String name, required T defaultValue, String? title, String? description, List<T>? availableOptions}) {
+  Property<T> property<T>({required String name, required T defaultValue, String? title, String? description, List<T>? availableOptions, dynamic Function(T value)? getJsonValue, T? Function(dynamic json)? setJsonValue}) {
     if (_props.containsKey(name)) {
       if (_props[name] is Property<T>) {
         return _props[name] as Property<T>;
@@ -24,8 +48,8 @@ class AppConfig {
         throw "Property type for '$name' changed dinamically. This is not supported";
       }
     }
-    final Property<T> prop = Property<T>._(name: name, defaultValue: defaultValue, rootConfig: this, title: title, description: description, availableOptions: availableOptions);
-    _props['name'] = prop;
+    final Property<T> prop = Property<T>._(name: name, defaultValue: defaultValue, rootConfig: this, title: title, description: description, availableOptions: availableOptions, getJsonValue: getJsonValue, setJsonValue: setJsonValue);
+    _props[name] = prop;
     return prop;
   }
 }
@@ -58,7 +82,8 @@ class Property<T> extends Equatable {
   final String? title;
   final String? description;
   final List<T>? availableOptions;
-
+  final dynamic Function(T value)? getJsonValue;
+  final T? Function(dynamic json)? setJsonValue;
 
   Property._({
     required AppConfig rootConfig,
@@ -67,13 +92,37 @@ class Property<T> extends Equatable {
     this.title,
     this.description,
     this.availableOptions,
+    this.getJsonValue,
+    this.setJsonValue,
   }) : _rootConfig = rootConfig;
 
   PropertyValueSetter<T> withValue() => PropertyValueSetter<T>._(this);
 
+  dynamic toJson() {
+    if (getJsonValue != null) {
+      return getJsonValue!(value);
+    } else {
+      return defaultJsonGetter(value);
+    }
+  }
+
+  fromJson(dynamic json) {
+    if (setJsonValue != null) {
+      final T? maybeValue = setJsonValue!(json);
+      if (maybeValue != null) {
+        value = maybeValue;
+      }
+    } else {
+      final T? maybeValue = defaultJsonSetter(json);
+      if (maybeValue != null) {
+        value = maybeValue;
+      }
+    }
+  }
+
   Value<T> get _value => _rootConfig.config().getValue(this);
   T get value => _value.value;
-  set value(T value) => _value.value = value;
+  set value(T value) { _value.value = value; _rootConfig.persist(); }
   bool get isVisible => _value._definition is! InvisibleValue;
   bool get isModifiable => _value._definition is _ModifiableValue;
   bool get enabled => (_value._definition as _ModifiableValue).isCurrentlyModifiable;
@@ -87,6 +136,22 @@ class Property<T> extends Equatable {
 
   @override
   List<Object?> get props => [name];
+
+  static dynamic defaultJsonGetter(value) {
+    if (value is String || value is bool) {
+      return value;
+    }
+
+    return null;
+  }
+
+  static T? defaultJsonSetter<T>(dynamic json) {
+    if (json is String || json is bool) {
+      return json;
+    }
+
+    return null;
+  }
 }
 
 class PropertyValueSetter<T> {
