@@ -58,7 +58,7 @@ class ConfigSet {
   final AppConfig appConfig;
   final Set<Value> values;
 
-  getValue<T>(Property<T> property) => values.whereType<Value<T>>().firstWhere(
+  Value<T> getValue<T>(Property<T> property) => values.whereType<Value<T>>().firstWhere(
     (element) => element.property == property,
     orElse: () => property.withValue().fixed(property.defaultValue),
   );
@@ -166,21 +166,29 @@ class PropertyValueSetter<T> {
   Value<T> withAndDependency(
     Value<T> child, {
     required List<Property<bool>> dependencies,
-  }) => Value<T>._(property, _AndBooleanDependantValue<T>(childValue: child, dependencies: dependencies));
+    bool keepLastValueOnDisable = false,
+    ValueWrapper<T>? disabledValue,
+  }) => Value<T>._(property, _AndBooleanDependantValue<T>(childValue: child, dependencies: dependencies, disabledValue: disabledValue, keepLastValueOnDisable: keepLastValueOnDisable));
   Value<T> withOrDependency(
     Value<T> child, {
     required List<Property<bool>> dependencies,
-  }) => Value<T>._(property, _OrBooleanDependantValue<T>(childValue: child, dependencies: dependencies));
+    bool keepLastValueOnDisable = false,
+    ValueWrapper<T>? disabledValue,
+  }) => Value<T>._(property, _OrBooleanDependantValue<T>(childValue: child, dependencies: dependencies, disabledValue: disabledValue, keepLastValueOnDisable: keepLastValueOnDisable));
   Value<T> withDependency<R>(
     Value<T> child, {
     required List<Property<R>> dependencies,
     required bool Function(List<Property<R>> dependencies) checkAvailability,
+    bool keepLastValueOnDisable = false,
+    ValueWrapper<T>? disabledValue,
   }) => Value<T>._(
     property,
     _CustomDependantValue<T,R>(
       childValue: child,
       dependencies: dependencies,
       checkAvailability: checkAvailability,
+      disabledValue: disabledValue,
+      keepLastValueOnDisable: keepLastValueOnDisable,
     ),
   );
 }
@@ -257,6 +265,8 @@ class _AndBooleanDependantValue<T> extends _DependantValue<T,bool> {
   _AndBooleanDependantValue({
     required super.childValue,
     required super.dependencies,
+    super.keepLastValueOnDisable = false,
+    super.disabledValue,
   });
 
   @override
@@ -270,6 +280,8 @@ class _OrBooleanDependantValue<T> extends _DependantValue<T,bool> {
   _OrBooleanDependantValue({
     required super.childValue,
     required super.dependencies,
+    super.keepLastValueOnDisable = false,
+    super.disabledValue,
   });
 
   @override
@@ -285,6 +297,8 @@ class _CustomDependantValue<T,R> extends _DependantValue<T,R> {
     required super.childValue,
     required super.dependencies,
     required this.checkAvailability,
+    super.keepLastValueOnDisable = false,
+    super.disabledValue,
   });
 
   @override
@@ -297,7 +311,8 @@ abstract class _DependantValue<T,R> extends _ValueDefinition<T> implements _Modi
   final Value<T> childValue;
   final List<Property<R>> dependencies;
   final BehaviorSubject<T?> streamController = BehaviorSubject();
-  final bool keepLastValueOndisable = false;
+  final bool keepLastValueOnDisable;
+  final ValueWrapper<T>? disabledValue;
 
   bool initialized = false;
 
@@ -312,7 +327,15 @@ abstract class _DependantValue<T,R> extends _ValueDefinition<T> implements _Modi
       return childValue.value;
     }
 
-    return keepLastValueOndisable ? childValue.value : null;
+    if (disabledValue != null) {
+      return disabledValue!.value;
+    }
+
+    if (keepLastValueOnDisable) {
+      return childValue.value;
+    }
+
+    return null;
   }
 
   @override
@@ -358,5 +381,13 @@ abstract class _DependantValue<T,R> extends _ValueDefinition<T> implements _Modi
   _DependantValue({
     required this.childValue,
     required this.dependencies,
+    this.keepLastValueOnDisable = false,
+    this.disabledValue,
   }) : super._();
+}
+
+class ValueWrapper<T> {
+  final T value;
+
+  ValueWrapper(this.value);
 }
